@@ -28,7 +28,6 @@ export default function MapaBaixadaSantista() {
     });
   };
 
-  // ⬇️ O return agora está no lugar certo
   return (
     <div className="relative w-full h-auto">
       <svg
