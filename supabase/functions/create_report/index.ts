@@ -96,17 +96,36 @@ Deno.serve(async (req) => {
                 status: 404
             });
         }
+
         const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
+
         if (municipioError || !municipio) {
             console.error("Municipio not found");
             return new Response(`{ "message": "Municipio não encontrado" } `, {
                 status: 404
             });
         }
+
+        const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+
+        const { data: recentRelatos, error: recentRelatoError } = await supabase
+            .from("relatos")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("municipio_id", municipio.id)
+            .gt("created_at", twelveHoursAgo);
+
+        if (recentRelatoError) throw new Error("failed to check for recent relatos");
+
+        if (recentRelatos.length > 0) {
+            throw new Error("user already submitted a relato in the last 12 hours");
+        }
+
         const { data: inserted, error: insertError } = await supabase.from("relatos").insert({
             user_id: user_id,
             municipio_id: municipio.id
         }).select();
+
         if (insertError || !inserted) {
             console.error("Failed to insert relato");
             return new Response(`{ "message": "Falha ao criar relato" } `, {
@@ -114,37 +133,49 @@ Deno.serve(async (req) => {
             });
         }
         const newRelato = inserted[0];
-        const cutoff = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
-        const { data: existingNotif, errorExistingNotif } = await supabase.from('notificacoes').select(`
-    id,
-    primeiro_relato,
-    n_confirmados,
-    estado,
-    confirmacoes_necessarias,
-    relato:relatos (
-      id,
-      municipio_id
-    )
-  `).gt("created_at", cutoff);
-        if (errorExistingNotif) {
-            console.log(errorExistingNotif);
-        } else {
-            console.log(existingNotif);
-        }
-        // filter client-side
-        const filteredNotif = existingNotif?.find((notif) => notif.relato?.municipio_id === municipio.id);
-        console.log(filteredNotif);
-        if (filteredNotif) {
-            filteredNotif.n_confirmados += 1;
-            if (filteredNotif.estado === "em_confirmacao" && existingNotif.n_confirmados >= filteredNotif.confirmacoes_necessarias) {
-                filteredNotif.estado = "pendente";
+        const { data: lastSituacao, error: errorLastSituacao } = await supabase
+            .from('situacao_municipios')
+            .select(`
+                id,
+                municipio_id,
+                id_situacao,
+                notificacao_id,
+                created_at
+              `)
+            .eq('municipio_id', municipio.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (lastSituacao?.id_situacao === 1) {
+            const { data: notificacao, error: errorNotif } = await supabase
+                .from('notificacoes')
+                .select(`
+                      id,
+                      estado,
+                      created_at,
+                      n_confirmados,
+                      confirmacoes_necessarias,
+                      primeiro_relato,
+                      relato:relatos (
+                        municipio_id
+                      )
+                    `)
+                .eq('id', lastSituacao.notificacao_id)
+                .single();
+
+            if (errorNotif) throw errorNotif;
+
+            notificacao.n_confirmados += 1;
+            if (notificacao.estado === "em_confirmacao" && notificacao.n_confirmados >= notificacao.confirmacoes_necessarias) {
+                notificacao.estado = "pendente";
             }
             const { data: a, error: e } = await supabase.from("notificacoes").update({
-                n_confirmados: filteredNotif.n_confirmados,
-                estado: filteredNotif.estado
-            }).eq("id", filteredNotif.id);
+                n_confirmados: notificacao.n_confirmados,
+                estado: notificacao.estado
+            }).eq("id", notificacao.id);
             console.log(a, e);
-            await sendNotification(filteredNotif);
+            await sendNotification(notificacao);
         } else {
             const { count } = await supabase.from("user_municipio").select("*", {
                 count: "exact",
