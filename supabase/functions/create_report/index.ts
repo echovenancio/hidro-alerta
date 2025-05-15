@@ -22,13 +22,31 @@ async function getMunicipioId(relatoId) {
 }
 // Insert rows into "user_notificacao" table
 async function insertUserNotificacoes(userIds, notificacaoId) {
-    const rows = userIds.map((user_id) => ({
-        user_id,
-        notificacao_id: notificacaoId
-    }));
-    const { error } = await supabase.from("user_notificacao").insert(rows);
-    if (error) throw new Error("Failed to insert user_notificacao");
+    // get existing entries
+    const { data: existing, error: selectError } = await supabase
+        .from("user_notificacao")
+        .select("user_id")
+        .eq("notificacao_id", notificacaoId);
+
+    if (selectError) throw new Error("Failed to check existing user_notificacao");
+
+    const existingIds = new Set(existing.map((r) => r.user_id));
+    const newRows = userIds
+        .filter((id) => !existingIds.has(id))
+        .map((user_id) => ({
+            user_id,
+            notificacao_id: notificacaoId
+        }));
+
+    if (newRows.length === 0) return;
+
+    const { error: insertError } = await supabase
+        .from("user_notificacao")
+        .insert(newRows);
+
+    if (insertError) throw new Error("Failed to insert user_notificacao");
 }
+
 // Fetch target users for a municipio
 async function getTargetUsers(municipioId, percent = 1.0) {
     const { data, error } = await supabase.from("user_municipios").select("user_id").eq("municipio_id", municipioId).eq("e_moradia", true);
@@ -74,14 +92,14 @@ Deno.serve(async (req) => {
         const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
         if (error != null) {
             console.error("User not found");
-            return new Response("Usuario não foi encontrado", {
+            return new Response(`{ "message": "Usuario não foi encontrado"} `, {
                 status: 404
             });
         }
         const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
         if (municipioError || !municipio) {
             console.error("Municipio not found");
-            return new Response("Municipio não encontrado", {
+            return new Response(`{ "message": "Municipio não encontrado" } `, {
                 status: 404
             });
         }
@@ -91,7 +109,7 @@ Deno.serve(async (req) => {
         }).select();
         if (insertError || !inserted) {
             console.error("Failed to insert relato");
-            return new Response("Falha ao criar relato", {
+            return new Response(`{ "message": "Falha ao criar relato" } `, {
                 status: 500
             });
         }
@@ -107,7 +125,7 @@ Deno.serve(async (req) => {
       id,
       municipio_id
     )
-  `).gt("created_at", cutoff); // keep the `created_at` filter
+  `).gt("created_at", cutoff);
         if (errorExistingNotif) {
             console.log(errorExistingNotif);
         } else {
@@ -142,7 +160,7 @@ Deno.serve(async (req) => {
             }).select();
             if (notifError != null) {
                 console.log(notifError);
-                return new Response("Falha ao criar relato", {
+                return new Response(`{ "message": "Falha ao criar relato" } `, {
                     status: 500
                 });
             }
@@ -153,12 +171,12 @@ Deno.serve(async (req) => {
             });
             await sendNotification(notifInsert[0]);
         }
-        return new Response("Relato criado com sucesso", {
+        return new Response(`{ "message": "Relato criado com sucesso" } `, {
             status: 201
         });
     } catch (err) {
         console.error(err);
-        return new Response(err, {
+        return new Response(`{ "message": "${err}" } `, {
             status: 500
         });
     }
