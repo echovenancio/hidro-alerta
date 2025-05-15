@@ -1,119 +1,148 @@
-// cleaner, leaner version of the original supabase edge function
+// Cleaner and leaner version of the Supabase Edge function
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.42.4';
 
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${Deno.env.get("SERVICE_ROLE_KEY")}` } } }
-)
-
-async function getMunicipioId(relatoId: number) {
-    const { data, error } = await supabase.from("relatos")
-        .select("municipio_id")
-        .eq("id", relatoId)
-        .single()
-    if (error) throw new Error("Failed to get municipio")
-    return data.municipio_id
+const supabase = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
+// Helper function to shuffle an array
+function shuffle(arr) {
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [
+      arr[j],
+      arr[i]
+    ];
+  }
+  return arr;
 }
-
-async function insertUserNotificacoes(userIds: string[], notificacaoId: number) {
-    const rows = userIds.map(user_id => ({ user_id, notificacao_id: notificacaoId }))
-    const { error } = await supabase.from("user_notificacao").insert(rows)
-    if (error) throw new Error("Failed to insert user_notificacao")
+// Fetch municipio_id from "relatos" table
+async function getMunicipioId(relatoId) {
+  const { data, error } = await supabase.from("relatos").select("municipio_id").eq("id", relatoId).single();
+  if (error) throw new Error("Failed to get municipio");
+  return data.municipio_id;
 }
-
-async function getTargetUsers(municipioId: number, percent: number = 1.0) {
-    const { data, error } = await supabase.from("user_municipio")
-        .select("user_id")
-        .eq("municipio_id", municipioId)
-        .eq("e_moradia", true)
-    if (error) throw new Error("Failed to fetch users")
-    const limit = Math.ceil(data.length * percent)
-    return shuffle(data).slice(0, limit).map(u => u.user_id)
+// Insert rows into "user_notificacao" table
+async function insertUserNotificacoes(userIds, notificacaoId) {
+  const rows = userIds.map((user_id)=>({
+      user_id,
+      notificacao_id: notificacaoId
+    }));
+  const { error } = await supabase.from("user_notificacao").insert(rows);
+  if (error) throw new Error("Failed to insert user_notificacao");
 }
-
-function shuffle<T>(arr: T[]): T[] {
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-            ;[arr[i], arr[j]] = [arr[j], arr[i]]
+// Fetch target users for a municipio
+async function getTargetUsers(municipioId, percent = 1.0) {
+  const { data, error } = await supabase.from("user_municipios").select("user_id").eq("municipio_id", municipioId).eq("e_moradia", true);
+  if (error != null) {
+    console.log(error);
+    throw new Error("Failed to fetch users");
+  }
+  const limit = Math.ceil(data.length * percent);
+  return shuffle(data).slice(0, limit).map((u)=>u.user_id);
+}
+// Send notification logic
+async function sendNotification(notification) {
+  if ([
+    "notificado",
+    "em_confirmacao"
+  ].includes(notification.estado)) return;
+  const municipioId = await getMunicipioId(notification.primeiro_relato);
+  const percent = notification.estado === "pendente_confirmacao" ? 0.1 : 1.0;
+  const users = await getTargetUsers(municipioId, percent);
+  await insertUserNotificacoes(users, notification.id);
+}
+// Main handler for the edge function
+Deno.serve(async (req)=>{
+  try {
+    const { municipio_id, user_id } = await req.json();
+    const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
+    if (error != null) {
+      console.error("User not found");
+      return new Response("Usuario não foi encontrado", {
+        status: 404
+      });
     }
-    return arr
-}
-
-async function sendNotification(n: any) {
-    if (n.estado === "notificado" || n.estado === "em_confirmacao") return
-
-    const municipioId = await getMunicipioId(n.primeiro_relato)
-    const percent = n.estado === "pendente_confirmacao" ? 0.1 : 1.0
-    const users = await getTargetUsers(municipioId, percent)
-    await insertUserNotificacoes(users, n.id)
-}
-
-Deno.serve(async req => {
-    try {
-        const { municipio_id } = await req.json()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || user.role !== "authenticated") return new Response("Forbidden", { status: 403 })
-
-        const { data: municipio } = await supabase.from("municipios")
-            .select("id")
-            .eq("id", municipio_id)
-            .single()
-        if (!municipio) return new Response("Municipio not found", { status: 404 })
-
-        const { data: inserted, error: insertErr } = await supabase.from("relatos")
-            .insert({ user_id: user.id, municipio_id: municipio.id })
-            .select()
-        if (insertErr || !inserted) return new Response("Insert fail", { status: 500 })
-
-        const newRelato = inserted[0]
-        const cutoff = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
-        const { data: notif } = await supabase.from("notificacoes")
-            .select("*").eq("relatos.municipio_id", municipio.id)
-            .gt("created_at", cutoff)
-            .single()
-
-        if (notif) {
-            notif.n_confirmados++
-            if (notif.estado === "em_confirmacao" && notif.n_confirmados >= notif.confirmacoes_necessarias) {
-                notif.estado = "pendente"
-            }
-            await supabase.from("notificacoes").update({
-                n_confirmados: notif.n_confirmados,
-                estado: notif.estado
-            }).eq("id", notif.id)
-
-            await sendNotification(notif)
-        } else {
-            const { data: pop } = await supabase.from("user_municipio")
-                .eq("municipio_id", municipio.id)
-                .eq("e_moradia", true)
-                .select("id", { count: 'exact', head: true })
-            const count = pop?.length || 0
-            const confirmacoes_necessarias = Math.ceil(count * 0.05)
-            const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao"
-
-            const { data: notifInsert } = await supabase.from("notificacoes").insert({
-                municipio_id: municipio.id,
-                n_confirmados: 1,
-                estado,
-                confirmacoes_necessarias,
-                primeiro_relato: newRelato.id
-            }).select()
-
-            await supabase.from("user_notificacao").insert({
-                user_id: user.id,
-                notificacao_id: notifInsert[0].id
-            })
-
-            await sendNotification(notifInsert[0])
-        }
-
-        return new Response("Relato created", { status: 201 })
-    } catch (err) {
-        console.error(err)
-        return new Response("Internal Server Error", { status: 500 })
+    const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
+    if (municipioError || !municipio) {
+      console.error("Municipio not found");
+      return new Response("Municipio não encontrado", {
+        status: 404
+      });
     }
-})
+    const { data: inserted, error: insertError } = await supabase.from("relatos").insert({
+      user_id: user_id,
+      municipio_id: municipio.id
+    }).select();
+    if (insertError || !inserted) {
+      console.error("Failed to insert relato");
+      return new Response("Falha ao criar relato", {
+        status: 500
+      });
+    }
+    const newRelato = inserted[0];
+    const cutoff = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    const { data: existingNotif, errorExistingNotif } = await supabase.from('notificacoes').select(`
+    id,
+    primeiro_relato,
+    n_confirmados,
+    estado,
+    confirmacoes_necessarias,
+    relato:relatos (
+      id,
+      municipio_id
+    )
+  `).gt("created_at", cutoff); // keep the `created_at` filter
+    if (errorExistingNotif) {
+      console.log(errorExistingNotif);
+    } else {
+      console.log(existingNotif);
+    }
+    // filter client-side
+    const filteredNotif = existingNotif?.find((notif)=>notif.relato?.municipio_id === municipio.id);
+    console.log(filteredNotif);
+    if (filteredNotif) {
+      filteredNotif.n_confirmados += 1;
+      if (filteredNotif.estado === "em_confirmacao" && existingNotif.n_confirmados >= filteredNotif.confirmacoes_necessarias) {
+        filteredNotif.estado = "pendente";
+      }
+      const { data: a, error: e } = await supabase.from("notificacoes").update({
+        n_confirmados: filteredNotif.n_confirmados,
+        estado: filteredNotif.estado
+      }).eq("id", filteredNotif.id);
+      console.log(a, e);
+      await sendNotification(filteredNotif);
+    } else {
+      const { count } = await supabase.from("user_municipio").select("*", {
+        count: "exact",
+        head: true
+      }).eq("municipio_id", municipio.id).eq("e_moradia", true);
+      const confirmacoes_necessarias = Math.ceil((count || 0) * 0.05);
+      const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao";
+      const { data: notifInsert, error: notifError } = await supabase.from("notificacoes").insert({
+        n_confirmados: 1,
+        estado: estado,
+        confirmacoes_necessarias,
+        primeiro_relato: newRelato.id
+      }).select();
+      if (notifError != null) {
+        console.log(notifError);
+        return new Response("Falha ao criar relato", {
+          status: 500
+        });
+      }
+      await supabase.from("user_notificacao").insert({
+        foi_confirmado: true,
+        user_id: user_id,
+        notificacao_id: notifInsert[0].id
+      });
+      await sendNotification(notifInsert[0]);
+    }
+    return new Response("Relato criado com sucesso", {
+      status: 201
+    });
+  } catch (err) {
+    console.error(err);
+    return new Response(err, {
+      status: 500
+    });
+  }
+});
