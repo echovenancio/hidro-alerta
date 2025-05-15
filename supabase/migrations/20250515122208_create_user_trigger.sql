@@ -6,7 +6,7 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.users (id, owner_id)
-  values (new.id, new.id);
+  values (gen_random_uuid(), new.id);
   return new;
 end;
 $$ language plpgsql security definer;
