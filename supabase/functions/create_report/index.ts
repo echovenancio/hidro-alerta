@@ -64,7 +64,7 @@ async function sendNotification(notification) {
         "em_confirmacao"
     ].includes(notification.estado)) return;
     const municipioId = await getMunicipioId(notification.primeiro_relato);
-    const percent = notification.estado === "pendente_confirmacao" ? 0.1 : 1.0;
+    const percent = notification.estado === "pendente_confirmacao" ? 0.5 : 1.0;
     const users = await getTargetUsers(municipioId, percent);
     await insertUserNotificacoes(users, notification.id);
     if (notification.estado === "pendente") {
@@ -108,12 +108,16 @@ Deno.serve(async (req) => {
 
         const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
 
+        console.log("aqui1")
+
         const { data: recentRelatos, error: recentRelatoError } = await supabase
             .from("relatos")
             .select("id")
             .eq("user_id", user_id)
             .eq("municipio_id", municipio.id)
             .gt("created_at", twelveHoursAgo);
+
+        console.log("aqui2")
 
         if (recentRelatoError) throw new Error("failed to check for recent relatos");
 
@@ -125,6 +129,8 @@ Deno.serve(async (req) => {
             user_id: user_id,
             municipio_id: municipio.id
         }).select();
+
+        console.log("aqui3")
 
         if (insertError || !inserted) {
             console.error("Failed to insert relato");
@@ -146,6 +152,8 @@ Deno.serve(async (req) => {
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
+
+        console.log("aqui4")
 
         if (lastSituacao?.id_situacao === 1) {
             const { data: notificacao, error: errorNotif } = await supabase
@@ -177,11 +185,15 @@ Deno.serve(async (req) => {
             console.log(a, e);
             await sendNotification(notificacao);
         } else {
-            const { count } = await supabase.from("user_municipio").select("*", {
+            console.log("municipio_id", municipio.id);
+            const { count } = await supabase.from("user_municipios").select("*", {
                 count: "exact",
                 head: true
             }).eq("municipio_id", municipio.id).eq("e_moradia", true);
-            const confirmacoes_necessarias = Math.ceil((count || 0) * 0.05);
+
+            console.log("count", count);
+
+            const confirmacoes_necessarias = Math.ceil((count || 0) * 0.5);
             const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao";
             const { data: notifInsert, error: notifError } = await supabase.from("notificacoes").insert({
                 n_confirmados: 1,
