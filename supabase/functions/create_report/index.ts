@@ -1,12 +1,9 @@
 // Cleaner and leaner version of the Supabase Edge function
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.42.4';
 import {
-  supabase,
-  getMunicipioId,
-  insertUserNotificacoes,
-  getTargetUsers,
-  sendNotification
+    supabase,
+    sendNotification,
+    getMinConfirmacoes
 } from '../_shared/utils.ts'
 
 // Main handler for the edge function
@@ -117,7 +114,9 @@ Deno.serve(async (req) => {
 
             console.log("count", count);
 
-            const confirmacoes_necessarias = Math.ceil((count || 0) * 0.5);
+            const pool = getMinConfirmacoes(count || 0);
+            console.log("pool", pool);
+            const confirmacoes_necessarias = pool.min;
             const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao";
             const { data: notifInsert, error: notifError } = await supabase.from("notificacoes").insert({
                 n_confirmados: 1,
@@ -136,7 +135,7 @@ Deno.serve(async (req) => {
                 user_id: user_id,
                 notificacao_id: notifInsert[0].id
             });
-            await sendNotification(notifInsert[0]);
+            await sendNotification(notifInsert[0], pool);
         }
         return new Response(`{ "message": "Relato criado com sucesso" } `, {
             status: 201

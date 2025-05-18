@@ -14,6 +14,27 @@ export function shuffle(arr) {
     return arr
 }
 
+export type Pool = {
+    total: number
+    min: number
+}
+
+export function getMinConfirmacoes(count: number): Pool {
+    if (count <= 1) {
+        return { total: 1, min: 1 }
+    }
+    else if (count <= 10) {
+        let total = Math.ceil(count * 0.5)
+        let min = Math.ceil(total / 2)
+        return { total: total, min }
+    }
+    else {
+        let total = Math.ceil(count * 0.2)
+        let min = Math.ceil(total / 2)
+        return { total: total, min }
+    }
+}
+
 export async function getMunicipioId(relatoId) {
     const { data, error } = await supabase
         .from('relatos')
@@ -49,7 +70,7 @@ export async function insertUserNotificacoes(userIds, notificacaoId) {
     if (insertError) throw new Error('Failed to insert user_notificacao')
 }
 
-export async function getTargetUsers(municipioId, percent = 1.0) {
+export async function getTargetUsers(municipioId, numberOfUsers) {
     const { data, error } = await supabase
         .from('user_municipios')
         .select('user_id')
@@ -61,20 +82,23 @@ export async function getTargetUsers(municipioId, percent = 1.0) {
         throw new Error('Failed to fetch users')
     }
 
-    const limit = Math.ceil(data.length * percent)
+    const limit = Math.min(numberOfUsers, data.length)
     return shuffle(data).slice(0, limit).map((u) => u.user_id)
 }
 
-export async function sendNotification(notification) {
+export async function sendNotification(notification, pool: Pool = null) {
     if (['notificado', 'em_confirmacao'].includes(notification.estado)) return
 
     const municipioId = await getMunicipioId(notification.primeiro_relato)
-    const percent = notification.estado === 'pendente_confirmacao' ? 0.5 : 1.0
-    const users = await getTargetUsers(municipioId, percent)
+    const limit = pool == null ? 10000000 : pool.total 
+    const users = await getTargetUsers(municipioId, limit)
     await insertUserNotificacoes(users, notification.id)
 
     const nextEstado =
         notification.estado === 'pendente' ? 'notificado' : 'em_confirmacao'
+
+    console.log(`Sending notification ${notification.id} to ${users.length} users`)
+    console.log("nextEstado", nextEstado)
 
     const { error } = await supabase
         .from('notificacoes')
