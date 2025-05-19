@@ -7,17 +7,13 @@ import {
     Guaruja,
     Praiagrande,
     Santos,
-    Santos2,
     Saovicente,
     Itanhaem,
     Mongagua,
     Peruibe,
-    Saovicente2,
 } from "./Cities";
 
-export default function MapaBaixadaSantista() {
-
-    const [situacoes, setSituacoes] = useState([]);
+export default function MapaBaixadaSantista({ situacoes }) {
 
     const mapNomeToComponent = {
         "Bertioga": Bertioga,
@@ -37,26 +33,6 @@ export default function MapaBaixadaSantista() {
         3: null, // Default 
     };
 
-    async function getSituacoes() {
-        const { data: situacoes, error } = await supabase
-            .from("ultima_situacao_por_municipio")
-            .select("*")
-        if (error) {
-            console.error("Erro ao buscar dados:", error);
-        }
-        if (situacoes) {
-            setSituacoes(situacoes);
-        }
-    }
-
-    useEffect(() => {
-        getSituacoes();
-        console.log(situacoes);
-    }, [])
-
-    useEffect(() => {
-        console.log(situacoes);
-    }, [situacoes]);
 
     const [popupInfo, setPopupInfo] = useState(null);
     const [showPopupModal, setShowPopupModal] = useState(false);

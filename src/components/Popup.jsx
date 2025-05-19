@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Popup({ cidade, onConfirm, onClose }) {
+export default function Popup({ cidade, onConfirm, onClose, selfReport = true }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-md shadow-lg p-6 w-[90%] max-w-md">
@@ -10,10 +10,12 @@ export default function Popup({ cidade, onConfirm, onClose }) {
             &#x2715;
           </button>
         </div>
+
         <p className="mb-4 text-center">
           Você detectou problemas no sistema de distribuição de água no município de{" "}
           <span className="text-blue-600 font-semibold underline">{cidade}</span>?
         </p>
+
         <div className="flex justify-center">
           <button
             onClick={onConfirm}
