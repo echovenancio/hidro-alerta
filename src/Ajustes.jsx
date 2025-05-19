@@ -16,7 +16,7 @@ export default function Ajustes() {
             } else {
                 setEmail(data.user.email);
             }
-            const {data: customUserData, error: customUserError} = await supabase
+            const { data: customUserData, error: customUserError } = await supabase
                 .from('users')
                 .select('*')
                 .eq('id', data.user.id)
@@ -71,6 +71,29 @@ export default function Ajustes() {
         }
     }
 
+    const handleMoradiaUpdate = async (e) => {
+        e.preventDefault();
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { session } } = await supabase.auth.getSession()
+        console.log("id", user.id);
+        console.log("new moradia", e.target.value);
+        const jwt = session.access_token;
+        console.log("jwt", session.access_token);
+        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change_moradia`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({
+                user_id: user.id,
+                new_moradia: e.target.value,
+            }),
+        })
+
+        console.log(resp);
+    }
+
     return (
         <div className="min-h-screen flex flex-col">
             <Header2 />
@@ -106,7 +129,7 @@ export default function Ajustes() {
 
                         <div>
                             <label className="font-bold mb-2 block">*Endereço</label>
-                            <select className="border p-2 rounded w-full">
+                            <select className="border p-2 rounded w-full" onChange={handleMoradiaUpdate}>
                                 <option>BERTIOGA</option>
                                 <option>CUBATÃO</option>
                                 <option>GUARUJÁ</option>
