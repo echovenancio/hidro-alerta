@@ -1,119 +1,149 @@
-// cleaner, leaner version of the original supabase edge function
+// Cleaner and leaner version of the Supabase Edge function
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {
+    supabase,
+    sendNotification,
+    getMinConfirmacoes
+} from '../_shared/utils.ts'
 
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { createClient } from 'jsr:@supabase/supabase-js@2'
-
-const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${Deno.env.get("SERVICE_ROLE_KEY")}` } } }
-)
-
-async function getMunicipioId(relatoId: number) {
-    const { data, error } = await supabase.from("relatos")
-        .select("municipio_id")
-        .eq("id", relatoId)
-        .single()
-    if (error) throw new Error("Failed to get municipio")
-    return data.municipio_id
-}
-
-async function insertUserNotificacoes(userIds: string[], notificacaoId: number) {
-    const rows = userIds.map(user_id => ({ user_id, notificacao_id: notificacaoId }))
-    const { error } = await supabase.from("user_notificacao").insert(rows)
-    if (error) throw new Error("Failed to insert user_notificacao")
-}
-
-async function getTargetUsers(municipioId: number, percent: number = 1.0) {
-    const { data, error } = await supabase.from("user_municipio")
-        .select("user_id")
-        .eq("municipio_id", municipioId)
-        .eq("e_moradia", true)
-    if (error) throw new Error("Failed to fetch users")
-    const limit = Math.ceil(data.length * percent)
-    return shuffle(data).slice(0, limit).map(u => u.user_id)
-}
-
-function shuffle<T>(arr: T[]): T[] {
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-            ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    }
-    return arr
-}
-
-async function sendNotification(n: any) {
-    if (n.estado === "notificado" || n.estado === "em_confirmacao") return
-
-    const municipioId = await getMunicipioId(n.primeiro_relato)
-    const percent = n.estado === "pendente_confirmacao" ? 0.1 : 1.0
-    const users = await getTargetUsers(municipioId, percent)
-    await insertUserNotificacoes(users, n.id)
-}
-
-Deno.serve(async req => {
+// Main handler for the edge function
+Deno.serve(async (req) => {
     try {
-        const { municipio_id } = await req.json()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user || user.role !== "authenticated") return new Response("Forbidden", { status: 403 })
-
-        const { data: municipio } = await supabase.from("municipios")
-            .select("id")
-            .eq("id", municipio_id)
-            .single()
-        if (!municipio) return new Response("Municipio not found", { status: 404 })
-
-        const { data: inserted, error: insertErr } = await supabase.from("relatos")
-            .insert({ user_id: user.id, municipio_id: municipio.id })
-            .select()
-        if (insertErr || !inserted) return new Response("Insert fail", { status: 500 })
-
-        const newRelato = inserted[0]
-        const cutoff = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
-        const { data: notif } = await supabase.from("notificacoes")
-            .select("*").eq("relatos.municipio_id", municipio.id)
-            .gt("created_at", cutoff)
-            .single()
-
-        if (notif) {
-            notif.n_confirmados++
-            if (notif.estado === "em_confirmacao" && notif.n_confirmados >= notif.confirmacoes_necessarias) {
-                notif.estado = "pendente"
-            }
-            await supabase.from("notificacoes").update({
-                n_confirmados: notif.n_confirmados,
-                estado: notif.estado
-            }).eq("id", notif.id)
-
-            await sendNotification(notif)
-        } else {
-            const { data: pop } = await supabase.from("user_municipio")
-                .eq("municipio_id", municipio.id)
-                .eq("e_moradia", true)
-                .select("id", { count: 'exact', head: true })
-            const count = pop?.length || 0
-            const confirmacoes_necessarias = Math.ceil(count * 0.05)
-            const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao"
-
-            const { data: notifInsert } = await supabase.from("notificacoes").insert({
-                municipio_id: municipio.id,
-                n_confirmados: 1,
-                estado,
-                confirmacoes_necessarias,
-                primeiro_relato: newRelato.id
-            }).select()
-
-            await supabase.from("user_notificacao").insert({
-                user_id: user.id,
-                notificacao_id: notifInsert[0].id
-            })
-
-            await sendNotification(notifInsert[0])
+        const { municipio_id, user_id } = await req.json();
+        const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
+        if (error != null) {
+            console.error("User not found");
+            return new Response(`{ "message": "Usuario não foi encontrado"} `, {
+                status: 404
+            });
         }
 
-        return new Response("Relato created", { status: 201 })
+        const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
+
+        if (municipioError || !municipio) {
+            console.error("Municipio not found");
+            return new Response(`{ "message": "Municipio não encontrado" } `, {
+                status: 404
+            });
+        }
+
+        const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+
+        console.log("aqui1")
+
+        const { data: recentRelatos, error: recentRelatoError } = await supabase
+            .from("relatos")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("municipio_id", municipio.id)
+            .gt("created_at", twelveHoursAgo);
+
+        console.log("aqui2")
+
+        if (recentRelatoError) throw new Error("failed to check for recent relatos");
+
+        if (recentRelatos.length > 0) {
+            throw new Error("user already submitted a relato in the last 12 hours");
+        }
+
+        const { data: inserted, error: insertError } = await supabase.from("relatos").insert({
+            user_id: user_id,
+            municipio_id: municipio.id
+        }).select();
+
+        console.log("aqui3")
+
+        if (insertError || !inserted) {
+            console.error("Failed to insert relato");
+            return new Response(`{ "message": "Falha ao criar relato" } `, {
+                status: 500
+            });
+        }
+        const newRelato = inserted[0];
+        const { data: lastSituacao, error: errorLastSituacao } = await supabase
+            .from('situacao_municipios')
+            .select(`
+                id,
+                municipio_id,
+                id_situacao,
+                notificacao_id,
+                created_at
+              `)
+            .eq('municipio_id', municipio.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        console.log("aqui4")
+
+        if (lastSituacao?.id_situacao === 1) {
+            const { data: notificacao, error: errorNotif } = await supabase
+                .from('notificacoes')
+                .select(`
+                      id,
+                      estado,
+                      created_at,
+                      n_confirmados,
+                      confirmacoes_necessarias,
+                      primeiro_relato,
+                      relato:relatos (
+                        municipio_id
+                      )
+                    `)
+                .eq('id', lastSituacao.notificacao_id)
+                .single();
+
+            if (errorNotif) throw errorNotif;
+
+            notificacao.n_confirmados += 1;
+            if (notificacao.estado === "em_confirmacao" && notificacao.n_confirmados >= notificacao.confirmacoes_necessarias) {
+                notificacao.estado = "pendente";
+            }
+            const { data: a, error: e } = await supabase.from("notificacoes").update({
+                n_confirmados: notificacao.n_confirmados,
+                estado: notificacao.estado
+            }).eq("id", notificacao.id);
+            console.log(a, e);
+            await sendNotification(notificacao);
+        } else {
+            console.log("municipio_id", municipio.id);
+            const { count } = await supabase.from("user_municipios").select("*", {
+                count: "exact",
+                head: true
+            }).eq("municipio_id", municipio.id).eq("e_moradia", true);
+
+            console.log("count", count);
+
+            const pool = getMinConfirmacoes(count || 0);
+            console.log("pool", pool);
+            const confirmacoes_necessarias = pool.min;
+            const estado = confirmacoes_necessarias <= 1 ? "pendente" : "pendente_confirmacao";
+            const { data: notifInsert, error: notifError } = await supabase.from("notificacoes").insert({
+                n_confirmados: 1,
+                estado: estado,
+                confirmacoes_necessarias,
+                primeiro_relato: newRelato.id
+            }).select();
+            if (notifError != null) {
+                console.log(notifError);
+                return new Response(`{ "message": "Falha ao criar relato" } `, {
+                    status: 500
+                });
+            }
+            await supabase.from("user_notificacao").insert({
+                foi_confirmado: true,
+                user_id: user_id,
+                notificacao_id: notifInsert[0].id
+            });
+            await sendNotification(notifInsert[0], pool);
+        }
+        return new Response(`{ "message": "Relato criado com sucesso" } `, {
+            status: 201
+        });
     } catch (err) {
-        console.error(err)
-        return new Response("Internal Server Error", { status: 500 })
+        console.error(err);
+        return new Response(`{ "message": "${err}" } `, {
+            status: 500
+        });
     }
-})
+});

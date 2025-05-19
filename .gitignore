@@ -1,4 +1,4 @@
-# Logs
+ Logs
 logs
 *.log
 npm-debug.log*
@@ -32,13 +32,14 @@ build/
 .temp/
 .DS_Store
 
-.supabase/
-supabase/.temp/
-supabase/migrations/
-.supabase/config.toml
-supabase/config.toml
-.supabase/dev.db
 .env
 .env.*.local
 .env.local
 
+.supabase/
+supabase/.temp/
+supabase/migrations/.temp/
+supabase/seed/*.log
+supabase/seed/tmp/
+supabase/seed/cache/
+supabase/.branches/
