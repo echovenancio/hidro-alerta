@@ -8,6 +8,8 @@ import ModalRelato from "./components/Popup";
 export default function MapaPage() {
     const [cidadeSelecionada, setCidadeSelecionada] = useState(null);
     const [situacoes, setSituacoes] = useState([]);
+    const [popupData, setPopupData] = useState(null);
+    const [notificacoes, setNotificacoes] = useState([]);
 
     async function getSituacoes() {
         const { data: situacoes, error } = await supabase
@@ -21,6 +23,74 @@ export default function MapaPage() {
         }
     }
 
+    async function confirmarRelato(user_notificacao_id, confirmation) {
+        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/confirm_report`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+                user_notificacao_id,
+                confirmation
+            }),
+        })
+        console.log("resp", resp);
+    }
+
+    async function getAllNotificacoes() {
+        const { data: notificacoes, error } = await supabase
+            .from("user_notificacao")
+            .select(`*`)
+            .order("created_at", { ascending: false });
+
+        console.log("notificacoes", notificacoes);
+
+        if (error) {
+            console.log("Erro ao buscar dados:", error);
+            return;
+        }
+
+        const lastNotificacoes = notificacoes.filter(n => n.foi_confirmado == null)[notificacoes.length - 1];
+        console.log("lastNotificacoes", lastNotificacoes);
+
+        if (!lastNotificacoes) {
+            console.log("No new notifications");
+            return;
+        }
+
+        const { data: data, error: errorRpc } = await supabase
+            .rpc('get_municipio_nome_by_notificacao_id', { p_notificacao_id: lastNotificacoes.notificacao_id });
+
+        if (errorRpc) {
+            console.error("error fetching data:", error);
+            return;
+        }
+
+        console.log("data fetched:", data);
+
+        setPopupData({
+            id: data[0].id,
+            cidade: data[0].nome,
+            selfReport: false,
+            onClose: async () => {
+                console.log(`Problema relatado em ${data.nome}`);
+                await confirmarRelato(lastNotificacoes.id, false);
+                setPopupData(null);
+            },
+            onConfirm: async () => {
+                console.log(`Problema relatado em ${data.nome}`);
+                await confirmarRelato(lastNotificacoes.id, true);
+                setPopupData(null);
+            }
+        });
+
+
+        if (notificacoes) {
+            setNotificacoes(notificacoes);
+        }
+    }
+
     supabase.channel('custom-all-channel')
         .on(
             'postgres_changes',
@@ -31,43 +101,63 @@ export default function MapaPage() {
         )
         .subscribe()
 
-    supabase.channel('custom-insert-channel')
-        .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'user_notificacao' },
-            async (payload) => {
+    useEffect(() => {
+        const sub = supabase.channel('custom-insert-channel')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'user_notificacao' },
+                async (payload) => {
+                    console.log('change received!', payload);
 
-                console.log('Change received!', payload)
+                    const { data: data, error: error } = await supabase
+                        .rpc('get_municipio_nome_by_notificacao_id', { p_notificacao_id: payload.new.notificacao_id });
 
-                let { data: user_notificacao, error } = await supabase
-                    .from('user_notificacao')
-                    .select(`
-                        id,
-                        relatos(
-                            municipios(nome)
-                            )
-                    `)
-                    .eq('id', payload.new.id)
+                    if (error) {
+                        console.error("error fetching data:", error);
+                        return;
+                    }
 
-                if (error) {
-                    console.error("Erro ao buscar dados:", error);
+                    console.log("data fetched:", data);
+
+                    let not = data[0];
+
+                    console.log("not", not)
+
+                    setPopupData({
+                        id: not.id,
+                        cidade: not.nome,
+                        selfReport: false,
+                        onClose: async () => {
+                            console.log(`Problema relatado em ${not.nome}`);
+                            await confirmarRelato(payload.new.id, false);
+                            setPopupData(null);
+                        },
+                        onConfirm: async () => {
+                            console.log(`Problema relatado em ${not.nome}`);
+                            await confirmarRelato(payload.new.id, true);
+                            setPopupData(null);
+                        }
+                    });
                 }
+            )
+            .subscribe();
 
-                console.log(user_notificacao);
+        return () => {
+            supabase.removeChannel(sub);
+        };
+    }, []);
 
-                setCidadeSelecionada(user_notificacao[0].relatos.municipios.nome);
-            }
-        )
-        .subscribe()
 
     useEffect(() => {
         getSituacoes();
+        getAllNotificacoes();
         console.log(situacoes);
     }, [])
 
     useEffect(() => {
         console.log(situacoes);
-    }, [situacoes]);
+        console.log(notificacoes);
+    }, [situacoes, notificacoes]);
 
     const handleCidadeClick = (cidade) => {
         setCidadeSelecionada(cidade);
@@ -81,7 +171,7 @@ export default function MapaPage() {
     const situacaoCores = {
         1: "vermelho",
         2: "amarelo",
-        3: "verde", 
+        3: "verde",
     };
 
     const situacaoMensagens = {
@@ -115,18 +205,10 @@ export default function MapaPage() {
                 </div>
 
                 <div className="flex-1">
-                    <MapaBaixadaSantista onCidadeClick={handleCidadeClick} situacoes={situacoes} />
+                    <MapaBaixadaSantista onCidadeClick={handleCidadeClick} situacoes={situacoes} popupData={popupData} />
                 </div>
             </div>
 
-
-            {cidadeSelecionada && (
-                <ModalRelato
-                    cidade={cidadeSelecionada}
-                    onConfirm={handleConfirmarRelato}
-                    onClose={() => setCidadeSelecionada(null)}
-                />
-            )}
         </div>
     );
 }

@@ -13,7 +13,7 @@ import {
     Peruibe,
 } from "./Cities";
 
-export default function MapaBaixadaSantista({ situacoes }) {
+export default function MapaBaixadaSantista({ situacoes, popupData }) {
 
     const mapNomeToComponent = {
         "Bertioga": Bertioga,
@@ -85,6 +85,15 @@ export default function MapaBaixadaSantista({ situacoes }) {
 
             </svg>
 
+            {popupData && (
+                <Popup
+                    cidade={popupData.cidade}
+                    onClose={popupData.onClose}
+                    onConfirm={popupData.onConfirm}
+                    selfReport={popupData.selfReport}
+                />
+            )}
+
             {popupInfo && (
                 <div
                     className="absolute bg-white border border-black rounded px-3 py-2 shadow-md z-50"
@@ -95,14 +104,21 @@ export default function MapaBaixadaSantista({ situacoes }) {
                 >
                     <div className="text-sm font-bold flex items-center gap-2">
                         {popupInfo.cidade}
-                        {loggedIn && (
+                        {(loggedIn && (
                             <button
                                 className="text-blue-500 text-lg hover:scale-110 transition"
                                 onClick={() => setShowPopupModal(true)}
                             >
                                 ＋
                             </button>
-                        )}
+                        )) || (
+                            <button
+                                disabled
+                                className="text-gray-500 text-lg transition"
+                            >
+                                ＋
+                            </button>
+                        ) }
                     </div>
                     <div className="absolute left-1/2 -bottom-2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white" />
                 </div>

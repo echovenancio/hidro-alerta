@@ -6,10 +6,21 @@ import {
 
 Deno.serve(async (req) => {
     try {
-        const { user_notificacao_id } = await req.json();
 
-        if (!user_notificacao_id) {
-            return new Response(`{"message": "missing user_id or user_notificacao_id"}`, { status: 400 });
+        if (req.method === "OPTIONS") {
+            return new Response("ok", {
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                },
+            })
+        }
+
+        const { user_notificacao_id, confirmation } = await req.json();
+
+        if (!user_notificacao_id || !confirmation) {
+            return new Response(`{"message": "missing confirmation or user_notificacao_id"}`, { status: 400 });
         }
 
         // 1. get user_notificacao
@@ -30,12 +41,16 @@ Deno.serve(async (req) => {
         // 2. update foi_confirmado
         const { error: updateUserNotifError } = await supabase
             .from("user_notificacao")
-            .update({ foi_confirmado: true })
+            .update({ foi_confirmado: confirmation })
             .eq("id", user_notificacao_id);
 
         if (updateUserNotifError) {
             console.log(updateUserNotifError);
             return new Response(`{"message":"failed to confirm"}`, { status: 500 });
+        }
+
+        if (!confirmation) {
+            return new Response(`{"message":"confirmation cancelled"}`, { status: 200 });
         }
 
         // 3. fetch notificacao
@@ -74,7 +89,7 @@ Deno.serve(async (req) => {
 
         // 6. if estado changed to pendente, send broadcast
         if (notif.estado !== newEstado && newEstado === "pendente") {
-            let newNotif = {...notif, estado: newEstado };
+            let newNotif = { ...notif, estado: newEstado };
             console.log("Sending notification to users");
             await sendNotification(newNotif);
         }
