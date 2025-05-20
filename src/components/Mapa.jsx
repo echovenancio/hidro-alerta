@@ -36,14 +36,30 @@ export default function MapaBaixadaSantista({ situacoes }) {
 
     const [popupInfo, setPopupInfo] = useState(null);
     const [showPopupModal, setShowPopupModal] = useState(false);
+    const [loggedIn, setLoggedIn] = useState(false);
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setLoggedIn(!!session);
+        };
+        checkSession();
+
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            setLoggedIn(!!session);
+        });
+
+        return () => {
+            listener.subscription?.unsubscribe?.();
+        };
+    }, []);
 
     const handleCityClick = (cidade, event) => {
-        const bounds = event.target.getBoundingClientRect();
-
+        const mouseEvent = event.nativeEvent; // actual MouseEvent
         setPopupInfo({
             cidade,
-            x: bounds.left - 300,
-            y: bounds.top - 40,
+            x: mouseEvent.pageX,
+            y: mouseEvent.pageY,
         });
     };
 
@@ -73,31 +89,45 @@ export default function MapaBaixadaSantista({ situacoes }) {
                 <div
                     className="absolute bg-white border border-black rounded px-3 py-2 shadow-md z-50"
                     style={{
-                        left: popupInfo.x,
-                        top: popupInfo.y - 60,
-                        transform: "translateX(-50%)",
+                        left: popupInfo.x - 410,
+                        top: popupInfo.y - 150,
                     }}
                 >
                     <div className="text-sm font-bold flex items-center gap-2">
                         {popupInfo.cidade}
-                        <button
-                            className="text-blue-500 text-lg hover:scale-110 transition"
-                            onClick={() => setShowPopupModal(true)}
-                        >
-                            ＋
-                        </button>
+                        {loggedIn && (
+                            <button
+                                className="text-blue-500 text-lg hover:scale-110 transition"
+                                onClick={() => setShowPopupModal(true)}
+                            >
+                                ＋
+                            </button>
+                        )}
                     </div>
-                    <div className="absolute left-1/2 top-full transform -translate-x-1/2 w-3 h-3 bg-white border-l border-b border-black rotate-45" />
+                    <div className="absolute left-1/2 -bottom-2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white" />
                 </div>
             )}
 
-            {showPopupModal && popupInfo && (
+            {showPopupModal && popupInfo && loggedIn && (
                 <Popup
                     cidade={popupInfo.cidade}
                     onClose={() => setShowPopupModal(false)}
-                    onConfirm={() => {
-                        console.log(`Relato confirmado para ${popupInfo.cidade}`);
+                    onConfirm={async () => {
+                        const user = await supabase.auth.getSession();
+                        const userId = user.data.session.user.id;
+                        const municipio_id = situacoes.find(s => s.nome.toLowerCase() === popupInfo.cidade.toLowerCase()).municipio_id;
                         setShowPopupModal(false);
+                        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_report`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${user.data.session.access_token}`,
+                            },
+                            body: JSON.stringify({
+                                user_id: userId,
+                                municipio_id: municipio_id,
+                            }),
+                        });
                     }}
                 />
             )}

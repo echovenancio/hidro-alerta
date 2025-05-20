@@ -78,30 +78,47 @@ export default function MapaPage() {
         setCidadeSelecionada(null);
     };
 
+    const situacaoCores = {
+        1: "vermelho",
+        2: "amarelo",
+        3: "verde", 
+    };
+
+    const situacaoMensagens = {
+        1: "Sistema de distribuição de água interrompido.",
+        2: "Confirmando problemas no sistema de distribuição de água.",
+        3: "Sistema de distribuição de água normalizado.",
+    };
+
     return (
         <div>
             <Header2 />
             <div className="flex p-6 gap-6">
-                <div className="flex flex-col gap-4 w-80">
-                    {situacoes.map((situacao) => {
-                        if (situacao.notificacao_id != null) {
-                            return (
-                                <div key={situacao.id_situacao} className="flex flex-col gap-4">
-                                    <Alertcard
-                                        cidade={situacao.nome}
-                                        mensagem="Sistema de distribuição de água interrompido."
-                                        cor={situacao.id_situacao === 1 ? "vermelho" : "amarelo"}
-                                    />
-                                </div>
-                            );
-                        }
-                    })}
+                <div className="relative w-80 max-h-[80vh]">
+                    <div className="flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2">
+                        {[...new Map(
+                            situacoes
+                                .filter(s => s.notificacao_id != null)
+                                .map(s => [s.notificacao_id, s])
+                        ).values()].map((situacao) => (
+                            <div key={situacao.id_situacao} className="flex flex-col gap-4">
+                                <Alertcard
+                                    cidade={situacao.nome}
+                                    mensagem={situacaoMensagens[situacao.id_situacao]}
+                                    cor={situacaoCores[situacao.id_situacao]}
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent" />
                 </div>
 
                 <div className="flex-1">
                     <MapaBaixadaSantista onCidadeClick={handleCidadeClick} situacoes={situacoes} />
                 </div>
             </div>
+
 
             {cidadeSelecionada && (
                 <ModalRelato

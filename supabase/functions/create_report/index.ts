@@ -8,6 +8,18 @@ import {
 
 // Main handler for the edge function
 Deno.serve(async (req) => {
+
+    if (req.method === "OPTIONS") {
+        return new Response("ok", {
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            },
+        })
+    }
+
+
     try {
         const { municipio_id, user_id } = await req.json();
         const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
