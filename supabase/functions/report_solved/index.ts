@@ -23,6 +23,27 @@ Deno.serve(async (req) => {
             );
         }
 
+        if (entry.foi_resolvido) {
+            return new Response(
+                JSON.stringify({ message: "já está marcada como resolvido" }),
+                { status: 409 }
+            );
+        }
+
+        // if the entry was created in the last 2 hours return because it is too soon
+        const createdAt = new Date(entry.created_at);
+        const now = new Date();
+
+        const diff = now.getTime() - createdAt.getTime();
+        const diffInHours = diff / (1000 * 60 * 60);
+
+        if (diffInHours < 2) {
+            return new Response(
+                JSON.stringify({ message: "muito cedo para marcar como resolvido" }),
+                { status: 409 }
+            );
+        }
+
         const { error: updateError } = await supabase
             .from("user_notificacao")
             .update({ foi_resolvido: true })

@@ -10,6 +10,23 @@ export default function MapaPage() {
     const [situacoes, setSituacoes] = useState([]);
     const [popupData, setPopupData] = useState(null);
     const [notificacoes, setNotificacoes] = useState([]);
+    const [loggedIn, setLoggedIn] = useState(false);
+
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            setLoggedIn(!!session);
+        };
+        checkSession();
+
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            setLoggedIn(!!session);
+        });
+
+        return () => {
+            listener.subscription?.unsubscribe?.();
+        };
+    }, []);
 
     async function getSituacoes() {
         const { data: situacoes, error } = await supabase
@@ -102,6 +119,7 @@ export default function MapaPage() {
         .subscribe()
 
     useEffect(() => {
+        if (!loggedIn) return;
         const sub = supabase.channel('custom-insert-channel')
             .on(
                 'postgres_changes',
@@ -205,7 +223,7 @@ export default function MapaPage() {
                 </div>
 
                 <div className="flex-1">
-                    <MapaBaixadaSantista onCidadeClick={handleCidadeClick} situacoes={situacoes} popupData={popupData} />
+                    <MapaBaixadaSantista loggedIn={loggedIn} onCidadeClick={handleCidadeClick} situacoes={situacoes} popupData={popupData} />
                 </div>
             </div>
 

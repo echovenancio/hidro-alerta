@@ -13,7 +13,7 @@ import {
     Peruibe,
 } from "./Cities";
 
-export default function MapaBaixadaSantista({ situacoes, popupData }) {
+export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) {
 
     const mapNomeToComponent = {
         "Bertioga": Bertioga,
@@ -36,23 +36,7 @@ export default function MapaBaixadaSantista({ situacoes, popupData }) {
 
     const [popupInfo, setPopupInfo] = useState(null);
     const [showPopupModal, setShowPopupModal] = useState(false);
-    const [loggedIn, setLoggedIn] = useState(false);
 
-    useEffect(() => {
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            setLoggedIn(!!session);
-        };
-        checkSession();
-
-        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-            setLoggedIn(!!session);
-        });
-
-        return () => {
-            listener.subscription?.unsubscribe?.();
-        };
-    }, []);
 
     const handleCityClick = (cidade, event) => {
         const mouseEvent = event.nativeEvent; // actual MouseEvent

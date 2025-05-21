@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
         // 1. get user_notificacao
         const { data: userNotif, error: userNotifError } = await supabase
             .from("user_notificacao")
-            .select("id, foi_confirmado, notificacao_id, user_id")
+            .select("id, foi_confirmado, foi_resolvido, notificacao_id, user_id")
             .eq("id", user_notificacao_id)
             .single();
 
@@ -36,6 +36,10 @@ Deno.serve(async (req) => {
 
         if (userNotif.foi_confirmado) {
             return new Response(`{"message":"already confirmed"}`, { status: 409 });
+        }
+
+        if (userNotif.foi_resolvido) {
+            return new Response(`{"message":"already marked as resolved"}`, { status: 409 });
         }
 
         // 2. update foi_confirmado
