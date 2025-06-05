@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
     try {
 
         if (req.method === "OPTIONS") {
-            return withCorsHeaders("", 204);
+            return withCorsHeaders(null, 204);
         }
 
         const { user_notificacao_id, confirmation } = await req.json();

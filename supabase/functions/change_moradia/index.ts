@@ -9,7 +9,7 @@ import {
 Deno.serve(async (req) => {
 
     if (req.method === 'OPTIONS') {
-        return withCorsHeaders("", 204);
+        return withCorsHeaders(null, 204);
     }
 
 
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
             return withCorsHeaders(`{"message":"failed to insert new moradia"}`, 500);
         }
 
-        return new Response(`{"message":"success"}`, { status: 200 });
+        return withCorsHeaders(`{"message":"moradia updated successfully"}`, 200);
 
     } catch (err) {
         console.error(err);

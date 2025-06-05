@@ -7,6 +7,7 @@ import Signup from "./Signup";
 import Ajustes from "./Ajustes";
 import MapaPage from "./Mapapage";
 import PrivateRoute from "./PrivateRoute";
+import PostSignUp from "./PostSignUp";
 
 function App() {
     return (
@@ -29,6 +30,7 @@ function App() {
                     </PrivateRoute>
                 } />
                 <Route path="/mapa" element={<MapaPage />} />
+                <Route path="/post-signup" element={<PostSignUp />} />
             </Routes>
         </Router>
     );

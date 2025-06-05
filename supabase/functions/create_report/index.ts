@@ -11,7 +11,7 @@ import {
 Deno.serve(async (req) => {
 
     if (req.method === "OPTIONS") {
-        return withCorsHeaders("", 204);
+        return withCorsHeaders(null, 204);
     }
 
     try {
