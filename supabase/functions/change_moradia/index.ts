@@ -1,21 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
     supabase,
-    sendNotification
+    sendNotification,
+    withCorsHeaders
 } from '../_shared/utils.ts'
 
 
 Deno.serve(async (req) => {
 
     if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            status: 204,
-            headers: {
-                'Access-Control-Allow-Origin': '*', // or your origin
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            },
-        })
+        return withCorsHeaders("", 204);
     }
 
 
@@ -30,7 +24,7 @@ Deno.serve(async (req) => {
         console.log("user_id", user_id);
 
         if (!user_id || !moradia) {
-            return new Response(`{"message": "missing user_id or moradia"}`, { status: 400 });
+            return withCorsHeaders(`{"message": "missing user_id or moradia"}`, 400);
         }
 
         console.log("aqui")
@@ -44,7 +38,7 @@ Deno.serve(async (req) => {
         console.log("municipios", municipios);
 
         if (!municipios.some((m) => m.nome.toLowerCase() === moradia)) {
-            return new Response(`{"message": "invalid moradia"}`, { status: 400 });
+            return withCorsHeaders(`{"message": "invalid moradia"}`, 400);
         } else {
             moradia_id = municipios.find((m) => m.nome.toLowerCase() === moradia)?.id;
         }
@@ -65,7 +59,7 @@ Deno.serve(async (req) => {
                 .eq("user_id", user_id);
             if (lastMoradiaError) {
                 console.error(lastMoradiaError);
-                return new Response(`{"message":"failed to update last moradia"}`, { status: 500 });
+                return withCorsHeaders(`{"message":"failed to update last moradia"}`, 500);
             }
         }
 
@@ -80,13 +74,13 @@ Deno.serve(async (req) => {
 
         if (newMoradiaError) {
             console.error(newMoradiaError);
-            return new Response(`{"message":"failed to insert new moradia"}`, { status: 500 });
+            return withCorsHeaders(`{"message":"failed to insert new moradia"}`, 500);
         }
 
         return new Response(`{"message":"success"}`, { status: 200 });
 
     } catch (err) {
         console.error(err);
-        return new Response(`{"message":"internal server error"}`, { status: 500 });
+        return withCorsHeaders(`{"message":"internal server error"}`, 500);
     }
 });

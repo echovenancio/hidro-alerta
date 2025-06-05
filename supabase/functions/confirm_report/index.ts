@@ -1,26 +1,21 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
     supabase,
-    sendNotification
+    sendNotification,
+    withCorsHeaders
 } from '../_shared/utils.ts'
 
 Deno.serve(async (req) => {
     try {
 
         if (req.method === "OPTIONS") {
-            return new Response("ok", {
-                headers: {
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-                },
-            })
+            return withCorsHeaders("", 204);
         }
 
         const { user_notificacao_id, confirmation } = await req.json();
 
         if (!user_notificacao_id || !confirmation) {
-            return new Response(`{"message": "missing confirmation or user_notificacao_id"}`, { status: 400 });
+            return withCorsHeaders(`{"message": "missing confirmation or user_notificacao_id"}`, 400);
         }
 
         // 1. get user_notificacao
@@ -31,15 +26,15 @@ Deno.serve(async (req) => {
             .single();
 
         if (userNotifError || !userNotif) {
-            return new Response(`{"message": "user_notificacao not found"}`, { status: 404 });
+            return withCorsHeaders(`{"message": "user_notificacao not found"}`, 404);
         }
 
         if (userNotif.foi_confirmado) {
-            return new Response(`{"message":"already confirmed"}`, { status: 409 });
+            return withCorsHeaders(`{"message":"already confirmed"}`, 409);
         }
 
         if (userNotif.foi_resolvido) {
-            return new Response(`{"message":"already marked as resolved"}`, { status: 409 });
+            return withCorsHeaders(`{"message":"already marked as resolved"}`, 409);
         }
 
         // 2. update foi_confirmado
@@ -50,11 +45,11 @@ Deno.serve(async (req) => {
 
         if (updateUserNotifError) {
             console.log(updateUserNotifError);
-            return new Response(`{"message":"failed to confirm"}`, { status: 500 });
+            return withCorsHeaders(`{"message":"failed to update user_notificacao"}`, 500);
         }
 
         if (!confirmation) {
-            return new Response(`{"message":"confirmation cancelled"}`, { status: 200 });
+            return withCorsHeaders(`{"message":"confirmation cancelled"}`, 200);
         }
 
         // 3. fetch notificacao
@@ -65,7 +60,7 @@ Deno.serve(async (req) => {
             .single();
 
         if (notifFetchError || !notif) {
-            return new Response(`{"message":"notificacao not found"}`, { status: 404 });
+            return withCorsHeaders(`{"message":"notificacao not found"}`, 404);
         }
 
         // 4. increment n_confirmados
@@ -88,7 +83,7 @@ Deno.serve(async (req) => {
 
         if (updateNotifError) {
             console.log(updateNotifError);
-            return new Response(`{"message":"failed to update notificacao"}`, { status: 500 });
+            return withCorsHeaders(`{"message":"failed to update notificacao"}`, 500);
         }
 
         // 6. if estado changed to pendente, send broadcast
@@ -98,9 +93,9 @@ Deno.serve(async (req) => {
             await sendNotification(newNotif);
         }
 
-        return new Response(`{"message":"confirmation complete"}`, { status: 200 });
+        return withCorsHeaders(`{"message":"confirmation updated successfully"}`, 200);
     } catch (err) {
         console.error(err);
-        return new Response(`{"message":"internal server error"}`, { status: 500 });
+        return withCorsHeaders(`{"message":"internal server error"}`, 500);
     }
 });
