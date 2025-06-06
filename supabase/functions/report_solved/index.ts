@@ -1,11 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
     supabase,
-    sendNotification
+    sendNotification,
+    withCorsHeaders
 } from '../_shared/utils.ts'
 
 Deno.serve(async (req) => {
     try {
+
+        if (req.method === "OPTIONS") {
+            return withCorsHeaders(null, 204);
+        }
+
         const { user_notificacao_id } = await req.json();
 
         // verify the user_notificacao exists and belongs to the user
@@ -17,10 +23,22 @@ Deno.serve(async (req) => {
 
         if (fetchError || !entry) {
             console.log("user_notificacao not found");
-            return new Response(
-                JSON.stringify({ message: "notificação não encontrada" }),
-                { status: 404 }
-            );
+            return withCorsHeaders(`{"message": "notificação não encontrada"}`, 404);
+        }
+
+        if (entry.foi_resolvido) {
+            return withCorsHeaders(`{"message": "já está marcada como resolvido"}`, 409);
+        }
+
+        // if the entry was created in the last 2 hours return because it is too soon
+        const createdAt = new Date(entry.created_at);
+        const now = new Date();
+
+        const diff = now.getTime() - createdAt.getTime();
+        const diffInHours = diff / (1000 * 60 * 60);
+
+        if (diffInHours < 2) {
+            return withCorsHeaders(`{"message": "muito cedo para marcar como resolvido"}`, 409);
         }
 
         const { error: updateError } = await supabase
@@ -42,10 +60,7 @@ Deno.serve(async (req) => {
 
         if (municipioError || !municipio) {
             console.error(municipioError);
-            return new Response(
-                JSON.stringify({ message: "notificacao não encontrada" }),
-                { status: 404 }
-            );
+            return withCorsHeaders(`{"message": "notificação não encontrada"}`, 404);
         }
 
         console.log("municipio", municipio);
@@ -58,10 +73,7 @@ Deno.serve(async (req) => {
 
         if (situacaoError || !situacaoId) {
             console.error(situacaoError);
-            return new Response(
-                JSON.stringify({ message: "situacao não encontrada" }),
-                { status: 404 }
-            );
+            return withCorsHeaders(`{"message": "situacao não encontrada"}`, 404);
         }
 
         console.log("situacao", situacaoId);
@@ -74,10 +86,7 @@ Deno.serve(async (req) => {
             .limit(1);
 
         if (lastSituacao[0]?.id_situacao === situacaoId.id) {
-            return new Response(
-                JSON.stringify({ message: "já está marcada como resolvido" }),
-                { status: 409 }
-            );
+            return withCorsHeaders(`{"message": "já está marcada como resolvido"}`, 409);
         }
 
         const { data: situacaoMunicipio, error } = await supabase
@@ -90,21 +99,12 @@ Deno.serve(async (req) => {
 
         if (error) {
             console.error(error);
-            return new Response(
-                JSON.stringify({ message: "situacao_municipio não encontrada" }),
-                { status: 404 }
-            );
+            return withCorsHeaders(`{"message": "falha ao inserir situação do município"}`, 500);
         }
 
-        return new Response(
-            JSON.stringify({ message: "marcada como resolvida com sucesso" }),
-            { status: 200 }
-        );
+        return withCorsHeaders(`{"message": "marcada como resolvida com sucesso", "situacao_id": ${situacaoMunicipio.id_situacao}}`, 200);
     } catch (err) {
         console.error(err);
-        return new Response(
-            JSON.stringify({ message: "erro interno", detail: String(err) }),
-            { status: 500 }
-        );
+        return withCorsHeaders(`{"message": "erro interno", "detail": "${String(err)}"}`, 500);
     }
 });

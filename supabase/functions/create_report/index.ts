@@ -3,28 +3,30 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
     supabase,
     sendNotification,
-    getMinConfirmacoes
+    getMinConfirmacoes,
+    withCorsHeaders
 } from '../_shared/utils.ts'
 
 // Main handler for the edge function
 Deno.serve(async (req) => {
+
+    if (req.method === "OPTIONS") {
+        return withCorsHeaders(null, 204);
+    }
+
     try {
         const { municipio_id, user_id } = await req.json();
         const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
         if (error != null) {
             console.error("User not found");
-            return new Response(`{ "message": "Usuario não foi encontrado"} `, {
-                status: 404
-            });
+            return withCorsHeaders(`{ "message": "Usuário não foi encontrado" }`, 404);
         }
 
         const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
 
         if (municipioError || !municipio) {
             console.error("Municipio not found");
-            return new Response(`{ "message": "Municipio não encontrado" } `, {
-                status: 404
-            });
+            return withCorsHeaders(`{ "message": "Municipio não encontrado" }`, 404);
         }
 
         const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
@@ -55,10 +57,9 @@ Deno.serve(async (req) => {
 
         if (insertError || !inserted) {
             console.error("Failed to insert relato");
-            return new Response(`{ "message": "Falha ao criar relato" } `, {
-                status: 500
-            });
+            return withCorsHeaders(`{ "message": "Falha ao criar relato" }`, 500);
         }
+
         const newRelato = inserted[0];
         const { data: lastSituacao, error: errorLastSituacao } = await supabase
             .from('situacao_municipios')
@@ -126,9 +127,7 @@ Deno.serve(async (req) => {
             }).select();
             if (notifError != null) {
                 console.log(notifError);
-                return new Response(`{ "message": "Falha ao criar relato" } `, {
-                    status: 500
-                });
+                return withCorsHeaders(`{ "message": "Falha ao criar notificação" }`, 500);
             }
             await supabase.from("user_notificacao").insert({
                 foi_confirmado: true,
@@ -137,13 +136,9 @@ Deno.serve(async (req) => {
             });
             await sendNotification(notifInsert[0], pool);
         }
-        return new Response(`{ "message": "Relato criado com sucesso" } `, {
-            status: 201
-        });
+        return withCorsHeaders(`{ "message": "Relato criado com sucesso" }`, 201);
     } catch (err) {
         console.error(err);
-        return new Response(`{ "message": "${err}" } `, {
-            status: 500
-        });
+        return withCorsHeaders(`{ "message": "${err.message}" }`, 500);
     }
 });
