@@ -108,7 +108,7 @@ export default function OldNotifBar({ notifs, onClose }) {
                             >
                                 {/* resolved banner */}
                                 {isResolved && (
-                                    <div className="absolute -right-8 -top-2 rotate-45 bg-green-500 text-white text-[10px] px-2 py-[1px] font-bold shadow-md">
+                                    <div className="absolute -right-4 top-6 rotate-45 bg-green-500 text-white text-[16px] px-2 py-[1px] font-bold shadow-md">
                                         RESOLVIDO
                                     </div>
                                 )}

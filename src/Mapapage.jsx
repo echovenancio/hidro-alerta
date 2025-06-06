@@ -3,7 +3,6 @@ import supabase from "./utils/supabase";
 import Header2 from "./components/Header2";
 import MapaBaixadaSantista from "./components/Mapa";
 import Alertcard from "./components/Alertcard";
-import ModalRelato from "./components/Popup";
 import OldNotifBar from "./components/OldNotifBar";
 
 const situacaoCores = {
@@ -17,6 +16,20 @@ const situacaoMensagens = {
     2: "Confirmando problemas no sistema de distribuição de água.",
     3: "Sistema de distribuição de água normalizado.",
 };
+
+const LegendDot = ({ color }) => (
+    <span
+        style={{
+            display: "inline-block",
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            backgroundColor: color,
+            border: "1px solid #333",
+        }}
+    />
+);
+
 
 export default function MapaPage() {
     const [cidadeSelecionada, setCidadeSelecionada] = useState(null);
@@ -157,21 +170,33 @@ export default function MapaPage() {
                 </div>
 
                 <div className="flex-1">
+
                     <MapaBaixadaSantista
                         loggedIn={loggedIn}
                         onCidadeClick={setCidadeSelecionada}
                         situacoes={situacoes}
                         popupData={popupData}
                     />
+
+                    <div className="mt-4 flex gap-4 items-center text-sm text-gray-600">
+                        <LegendDot color="red" />
+                        <span>problema confirmado</span>
+                        <LegendDot color="yellow" />
+                        <span>estamos confirmando relatos</span>
+                        <LegendDot color="green" />
+                        <span>tudo certo</span>
+                    </div>
                 </div>
             </div>
 
-            <button
-                onClick={() => setShowPrevNotifs(true)}
-                className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full shadow-lg z-50"
-            >
-                notificações
-            </button>
+            {loggedIn && (
+                <button
+                    onClick={() => setShowPrevNotifs(true)}
+                    className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full shadow-lg z-30"
+                >
+                    notificações
+                </button>
+            )}
 
             {showPrevNotifs && (
                 <OldNotifBar
@@ -179,7 +204,7 @@ export default function MapaPage() {
                     onClose={() => setShowPrevNotifs(false)}
                 />
             )}
+
         </div>
     );
 }
-
