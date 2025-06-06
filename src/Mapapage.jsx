@@ -1,9 +1,22 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import supabase from "./utils/supabase";
 import Header2 from "./components/Header2";
 import MapaBaixadaSantista from "./components/Mapa";
 import Alertcard from "./components/Alertcard";
 import ModalRelato from "./components/Popup";
+import OldNotifBar from "./components/OldNotifBar";
+
+const situacaoCores = {
+    1: "vermelho",
+    2: "amarelo",
+    3: "verde",
+};
+
+const situacaoMensagens = {
+    1: "Sistema de distribuição de água interrompido.",
+    2: "Confirmando problemas no sistema de distribuição de água.",
+    3: "Sistema de distribuição de água normalizado.",
+};
 
 export default function MapaPage() {
     const [cidadeSelecionada, setCidadeSelecionada] = useState(null);
@@ -11,192 +24,119 @@ export default function MapaPage() {
     const [popupData, setPopupData] = useState(null);
     const [notificacoes, setNotificacoes] = useState([]);
     const [loggedIn, setLoggedIn] = useState(false);
+    const [showPrevNotifs, setShowPrevNotifs] = useState(false);
 
     useEffect(() => {
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
+        supabase.auth.getSession().then(({ data: { session } }) => {
             setLoggedIn(!!session);
-        };
-        checkSession();
+        });
 
         const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
             setLoggedIn(!!session);
         });
 
-        return () => {
-            listener.subscription?.unsubscribe?.();
-        };
+        return () => listener.subscription?.unsubscribe?.();
     }, []);
 
-    async function getSituacoes() {
-        const { data: situacoes, error } = await supabase
+    useEffect(() => {
+        const sub = supabase.channel('custom-all-channel')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'situacao_municipios',
+            }, getSituacoes)
+            .subscribe();
+
+        return () => supabase.removeChannel(sub);
+    }, []);
+
+    useEffect(() => {
+        getSituacoes();
+        getAllNotificacoes();
+
+        if (!loggedIn) return;
+
+        const sub = supabase.channel('custom-insert-channel')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'user_notificacao',
+            }, async ({ new: notif }) => {
+                const { data, error } = await supabase.rpc(
+                    'get_municipio_nome_by_notificacao_id',
+                    { p_notificacao_id: notif.notificacao_id }
+                );
+
+                if (error) return console.error("rpc err:", error);
+
+                const cidade = data?.[0];
+                if (!cidade) return;
+
+                setPopupData({
+                    id: cidade.id,
+                    cidade: cidade.nome,
+                    selfReport: false,
+                    onClose: () => handleConfirm(notif.id, false),
+                    onConfirm: () => handleConfirm(notif.id, true),
+                });
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(sub);
+    }, [loggedIn]);
+
+    const getSituacoes = async () => {
+        const { data, error } = await supabase
             .from("ultima_situacao_por_municipio")
-            .select("*")
-        if (error) {
-            console.error("Erro ao buscar dados:", error);
-        }
-        if (situacoes) {
-            setSituacoes(situacoes);
-        }
-    }
+            .select("*");
 
-    async function confirmarRelato(user_notificacao_id, confirmation) {
-        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/confirm_report`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-                user_notificacao_id,
-                confirmation
-            }),
-        })
-        console.log("resp", resp);
-    }
+        if (error) console.error("erro situacoes:", error);
+        else setSituacoes(data);
+    };
 
-    async function getAllNotificacoes() {
-        const { data: notificacoes, error } = await supabase
+    const getAllNotificacoes = async () => {
+        const { data: ret, error } = await supabase
             .from("user_notificacao")
-            .select(`*`)
+            .select("*")
             .order("created_at", { ascending: false });
 
-        console.log("notificacoes", notificacoes);
+        if (error) return console.error("erro notifs:", error);
+        setNotificacoes(ret);
 
-        if (error) {
-            console.log("Erro ao buscar dados:", error);
-            return;
-        }
+        const last = ret.find(n => n.foi_confirmado == null);
+        if (!last) return;
 
-        const lastNotificacoes = notificacoes.filter(n => n.foi_confirmado == null)[notificacoes.length - 1];
-        console.log("lastNotificacoes", lastNotificacoes);
+        const { data, error: rpcErr } = await supabase.rpc(
+            'get_municipio_nome_by_notificacao_id',
+            { p_notificacao_id: last.notificacao_id }
+        );
 
-        if (!lastNotificacoes) {
-            console.log("No new notifications");
-            return;
-        }
-
-        const { data: data, error: errorRpc } = await supabase
-            .rpc('get_municipio_nome_by_notificacao_id', { p_notificacao_id: lastNotificacoes.notificacao_id });
-
-        if (errorRpc) {
-            console.error("error fetching data:", error);
-            return;
-        }
-
-        console.log("data fetched:", data);
+        if (rpcErr || !data?.length) return;
 
         setPopupData({
             id: data[0].id,
             cidade: data[0].nome,
             selfReport: false,
-            onClose: async () => {
-                console.log(`Problema relatado em ${data.nome}`);
-                await confirmarRelato(lastNotificacoes.id, false);
-                setPopupData(null);
-            },
-            onConfirm: async () => {
-                console.log(`Problema relatado em ${data.nome}`);
-                await confirmarRelato(lastNotificacoes.id, true);
-                setPopupData(null);
-            }
+            onClose: () => handleConfirm(last.id, false),
+            onConfirm: () => handleConfirm(last.id, true),
         });
-
-
-        if (notificacoes) {
-            setNotificacoes(notificacoes);
-        }
-    }
-
-    supabase.channel('custom-all-channel')
-        .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'situacao_municipios' },
-            (_) => {
-                getSituacoes();
-            }
-        )
-        .subscribe()
-
-    useEffect(() => {
-        if (!loggedIn) return;
-        const sub = supabase.channel('custom-insert-channel')
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'user_notificacao' },
-                async (payload) => {
-                    console.log('change received!', payload);
-
-                    const { data: data, error: error } = await supabase
-                        .rpc('get_municipio_nome_by_notificacao_id', { p_notificacao_id: payload.new.notificacao_id });
-
-                    if (error) {
-                        console.error("error fetching data:", error);
-                        return;
-                    }
-
-                    console.log("data fetched:", data);
-
-                    let not = data[0];
-
-                    console.log("not", not)
-
-                    setPopupData({
-                        id: not.id,
-                        cidade: not.nome,
-                        selfReport: false,
-                        onClose: async () => {
-                            console.log(`Problema relatado em ${not.nome}`);
-                            await confirmarRelato(payload.new.id, false);
-                            setPopupData(null);
-                        },
-                        onConfirm: async () => {
-                            console.log(`Problema relatado em ${not.nome}`);
-                            await confirmarRelato(payload.new.id, true);
-                            setPopupData(null);
-                        }
-                    });
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(sub);
-        };
-    }, []);
-
-
-    useEffect(() => {
-        getSituacoes();
-        getAllNotificacoes();
-        console.log(situacoes);
-    }, [])
-
-    useEffect(() => {
-        console.log(situacoes);
-        console.log(notificacoes);
-    }, [situacoes, notificacoes]);
-
-    const handleCidadeClick = (cidade) => {
-        setCidadeSelecionada(cidade);
     };
 
-    const handleConfirmarRelato = () => {
-        console.log(`Problema relatado em ${cidadeSelecionada}`);
-        setCidadeSelecionada(null);
+    const handleConfirm = async (id, confirmation) => {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/confirm_report`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ user_notificacao_id: id, confirmation }),
+        });
+        setPopupData(null);
     };
 
-    const situacaoCores = {
-        1: "vermelho",
-        2: "amarelo",
-        3: "verde",
-    };
-
-    const situacaoMensagens = {
-        1: "Sistema de distribuição de água interrompido.",
-        2: "Confirmando problemas no sistema de distribuição de água.",
-        3: "Sistema de distribuição de água normalizado.",
-    };
+    const alertCards = [...new Map(
+        situacoes.filter(s => s.notificacao_id != null).map(s => [s.notificacao_id, s])
+    ).values()];
 
     return (
         <div>
@@ -204,29 +144,42 @@ export default function MapaPage() {
             <div className="flex p-6 gap-6">
                 <div className="relative w-80 max-h-[80vh]">
                     <div className="flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2">
-                        {[...new Map(
-                            situacoes
-                                .filter(s => s.notificacao_id != null)
-                                .map(s => [s.notificacao_id, s])
-                        ).values()].map((situacao) => (
-                            <div key={situacao.id_situacao} className="flex flex-col gap-4">
-                                <Alertcard
-                                    cidade={situacao.nome}
-                                    mensagem={situacaoMensagens[situacao.id_situacao]}
-                                    cor={situacaoCores[situacao.id_situacao]}
-                                />
-                            </div>
+                        {alertCards.map((s) => (
+                            <Alertcard
+                                key={s.id_situacao}
+                                cidade={s.nome}
+                                mensagem={situacaoMensagens[s.id_situacao]}
+                                cor={situacaoCores[s.id_situacao]}
+                            />
                         ))}
                     </div>
-
                     <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent" />
                 </div>
 
                 <div className="flex-1">
-                    <MapaBaixadaSantista loggedIn={loggedIn} onCidadeClick={handleCidadeClick} situacoes={situacoes} popupData={popupData} />
+                    <MapaBaixadaSantista
+                        loggedIn={loggedIn}
+                        onCidadeClick={setCidadeSelecionada}
+                        situacoes={situacoes}
+                        popupData={popupData}
+                    />
                 </div>
             </div>
 
+            <button
+                onClick={() => setShowPrevNotifs(true)}
+                className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full shadow-lg z-50"
+            >
+                notificações
+            </button>
+
+            {showPrevNotifs && (
+                <OldNotifBar
+                    notifs={notificacoes}
+                    onClose={() => setShowPrevNotifs(false)}
+                />
+            )}
         </div>
     );
 }
+
