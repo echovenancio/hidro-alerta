@@ -1,4 +1,4 @@
-create table situacao (
+CREATE TABLE IF NOT EXISTS situacao (
   id serial primary key,
   descricao varchar not null
 );
