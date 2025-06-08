@@ -1,5 +1,9 @@
 FROM node:20-alpine as build-stage
 WORKDIR /app
+
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
 COPY package*.json ./
 RUN npm install
 COPY . .
