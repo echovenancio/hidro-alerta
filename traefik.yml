@@ -1,0 +1,20 @@
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    filename: /etc/traefik/traefik.yml # yes, this file refers to itself to load tls certs
+    watch: true
+
+tls:
+  certificates:
+    - certFile: "/certs/echovenancio.tech.pem"
+      keyFile: "/certs/echovenancio.tech.key"
+
+api:
+  dashboard: true
