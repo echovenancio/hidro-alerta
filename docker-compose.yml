@@ -3,14 +3,7 @@ services:
     image: traefik:v2.10
     container_name: traefik
     command:
-      - --api.dashboard=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.myresolver.acme.tlschallenge=false
-      - --tls.certificates.certFile=/certs/echovenancio.tech.pem
-      - --tls.certificates.keyFile=/certs/echovenancio.tech.key
+      - --configFile=/etc/traefik/traefik.yml
     ports:
       - "80:80"
       - "443:443"
@@ -18,6 +11,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ~/.certs/:/certs/:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
     networks:
       - web
     restart: unless-stopped
