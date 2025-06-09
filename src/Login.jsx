@@ -19,8 +19,34 @@ export default function Login() {
         });
 
         if (error) {
-            setError(error.message);
-        } else {
+            console.error("Erro ao fazer login:", error.message);
+            setError("Email ou senha incorretos. Tente novamente.");
+            return;
+        }
+
+        const { dataUser, error: userError } = await supabase.from('users')
+            .select('*');
+
+        if (userError) {
+            console.error("Erro ao buscar usuário:", userError.message);
+            setError("Erro ao buscar usuário. Tente novamente.");
+            return;
+        }
+
+        const firstTimeLogin = dataUser.first_time_login;
+
+        if (firstTimeLogin) {
+            navigate("/post-signup");
+        }
+        else {
+            const { updateError } = await supabase.from('users')
+                .update({ first_time_login: false })
+                .eq('id', dataUser.id);
+            if (updateError) {
+                console.error("Erro ao atualizar usuário:", updateError.message);
+                setError("Erro ao atualizar usuário. Tente novamente.");
+                return;
+            }
             navigate("/mapa");
         }
     };

@@ -15,18 +15,18 @@ Deno.serve(async (req) => {
     }
 
     try {
-        const { municipio_id, user_id } = await req.json();
+        const { localidade_id, user_id } = await req.json();
         const { data, error } = await supabase.from('users').select("*").eq("id", user_id).single();
         if (error != null) {
             console.error("User not found");
             return withCorsHeaders(`{ "message": "Usuário não foi encontrado" }`, 404);
         }
 
-        const { data: municipio, error: municipioError } = await supabase.from("municipios").select("id").eq("id", municipio_id).single();
+        const { data: localidade, error: localidadeError } = await supabase.from("localidades").select("id").eq("id", localidade_id).single();
 
-        if (municipioError || !municipio) {
-            console.error("Municipio not found");
-            return withCorsHeaders(`{ "message": "Municipio não encontrado" }`, 404);
+        if (localidadeError || !localidade) {
+            console.error("Localidade not found");
+            return withCorsHeaders(`{ "message": "Localidade não encontrado" }`, 404);
         }
 
         const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
             .from("relatos")
             .select("id")
             .eq("user_id", user_id)
-            .eq("municipio_id", municipio.id)
+            .eq("id_localidade", localidade.id)
             .gt("created_at", twelveHoursAgo);
 
         console.log("aqui2")
@@ -50,13 +50,13 @@ Deno.serve(async (req) => {
 
         const { data: inserted, error: insertError } = await supabase.from("relatos").insert({
             user_id: user_id,
-            municipio_id: municipio.id
+            id_localidade: localidade.id
         }).select();
 
-        console.log("aqui3")
+        console.log("relato", inserted);
 
         if (insertError || !inserted) {
-            console.error("Failed to insert relato");
+            console.error("Failed to insert relato", insertError);
             return withCorsHeaders(`{ "message": "Falha ao criar relato" }`, 500);
         }
 
@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
                 notificacao_id,
                 created_at
               `)
-            .eq('municipio_id', municipio.id)
+            .eq('municipio_id', localidade.id_municipio)
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
@@ -86,15 +86,19 @@ Deno.serve(async (req) => {
                       created_at,
                       n_confirmados,
                       confirmacoes_necessarias,
-                      primeiro_relato,
                       relato:relatos (
-                        municipio_id
+                        localidade_id,
                       )
                     `)
                 .eq('id', lastSituacao.notificacao_id)
                 .single();
 
-            if (errorNotif) throw errorNotif;
+            if (errorNotif) {
+                console.error("Failed to fetch notificacao", errorNotif);
+                return withCorsHeaders(`{ "message": "Falha ao buscar notificação" }`, 500);
+            };
+
+            console.log("notificacao", notificacao);
 
             notificacao.n_confirmados += 1;
             if (notificacao.estado === "em_confirmacao" && notificacao.n_confirmados >= notificacao.confirmacoes_necessarias) {
@@ -107,11 +111,11 @@ Deno.serve(async (req) => {
             console.log(a, e);
             await sendNotification(notificacao);
         } else {
-            console.log("municipio_id", municipio.id);
+            console.log("municipio_id", localidade.municipio_id);
             const { count } = await supabase.from("user_municipios").select("*", {
                 count: "exact",
                 head: true
-            }).eq("municipio_id", municipio.id).eq("e_moradia", true);
+            }).eq("municipio_id", localidade.id_municipio).eq("e_moradia", true);
 
             console.log("count", count);
 
@@ -134,7 +138,11 @@ Deno.serve(async (req) => {
                 user_id: user_id,
                 notificacao_id: notifInsert[0].id
             });
-            await sendNotification(notifInsert[0], pool);
+
+            console.log("notificação criada", notifInsert[0]);
+            const notifWithRelato = { ...notifInsert[0], relato: newRelato };
+            console.log("notificação com relato", notifWithRelato);
+            await sendNotification(notifWithRelato, pool);
         }
         return withCorsHeaders(`{ "message": "Relato criado com sucesso" }`, 201);
     } catch (err) {

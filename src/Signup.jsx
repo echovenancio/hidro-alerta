@@ -25,7 +25,7 @@ export default function Signup() {
             console.error("Erro ao cadastrar:", res.error.message);
         }
 
-        navigate("/post-signup");
+        navigate("/signup-confirmation");
     }
 
     return (

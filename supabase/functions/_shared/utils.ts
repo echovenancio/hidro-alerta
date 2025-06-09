@@ -48,14 +48,18 @@ export function getMinConfirmacoes(count: number): Pool {
     }
 }
 
-export async function getMunicipioId(relatoId) {
+export async function getMunicipioId(localidadeId) {
+    console.log("getMunicipioId", localidadeId)
     const { data, error } = await supabase
-        .from('relatos')
-        .select('municipio_id')
-        .eq('id', relatoId)
+        .from('localidades')
+        .select('id, id_municipio')
+        .eq('id', localidadeId)
         .single()
-    if (error) throw new Error('Failed to get municipio')
-    return data.municipio_id
+    if (error) {
+        console.error("Error fetching municipio_id:", error)
+        throw new Error('Failed to fetch municipio_id')
+    }
+    return data.id_municipio
 }
 
 export async function insertUserNotificacoes(userIds, notificacaoId) {
@@ -102,9 +106,11 @@ export async function getTargetUsers(municipioId, numberOfUsers) {
 export async function sendNotification(notification, pool: Pool = null) {
     if (['notificado', 'em_confirmacao'].includes(notification.estado)) return
 
-    const municipioId = await getMunicipioId(notification.primeiro_relato)
+    const municipioId = await getMunicipioId(notification.relato.id_localidade)
+    console.log("municpioId", municipioId)
     const limit = pool == null ? 10000000 : pool.total 
     const users = await getTargetUsers(municipioId, limit)
+    console.log("users", users)
     await insertUserNotificacoes(users, notification.id)
 
     const nextEstado =

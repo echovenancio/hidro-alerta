@@ -8,6 +8,7 @@ import Ajustes from "./Ajustes";
 import MapaPage from "./Mapapage";
 import PrivateRoute from "./PrivateRoute";
 import PostSignUp from "./PostSignUp";
+import SignUpConfirmation from "./SignUpConfirmation";
 
 function App() {
     return (
@@ -31,6 +32,7 @@ function App() {
                 } />
                 <Route path="/mapa" element={<MapaPage />} />
                 <Route path="/post-signup" element={<PostSignUp />} />
+                <Route path="/signup-confirmation" element={<SignUpConfirmation />} />
             </Routes>
         </Router>
     );
