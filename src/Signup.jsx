@@ -25,6 +25,17 @@ export default function Signup() {
             console.error("Erro ao cadastrar:", res.error.message);
         }
 
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        })
+
+        if (error) {
+            setError(error.message);
+            console.error("Erro ao fazer login:", error.message);
+            return;
+        }
+
         navigate("/post-signup");
     }
 
