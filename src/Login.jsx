@@ -24,8 +24,10 @@ export default function Login() {
             return;
         }
 
-        const { dataUser, error: userError } = await supabase.from('users')
-            .select('*');
+        let { data: dataUser, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .single();
 
         if (userError) {
             console.error("Erro ao buscar usuário:", userError.message);
@@ -33,12 +35,11 @@ export default function Login() {
             return;
         }
 
+        console.log("Usuário logado:", dataUser);
+
         const firstTimeLogin = dataUser.first_time_login;
 
         if (firstTimeLogin) {
-            navigate("/post-signup");
-        }
-        else {
             const { updateError } = await supabase.from('users')
                 .update({ first_time_login: false })
                 .eq('id', dataUser.id);
@@ -47,6 +48,9 @@ export default function Login() {
                 setError("Erro ao atualizar usuário. Tente novamente.");
                 return;
             }
+            navigate("/post-signup");
+        }
+        else {
             navigate("/mapa");
         }
     };
