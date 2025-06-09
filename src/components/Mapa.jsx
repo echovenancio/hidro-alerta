@@ -37,6 +37,9 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
 
     const popupRef = useRef(null);
     const [popupInfo, setPopupInfo] = useState(null);
+    const [localidades, setLocalidades] = useState([]);
+    const [localidade, setLocalidade] = useState(null);
+    const [municipios, setMunicipios] = useState([]);
     const [showPopupModal, setShowPopupModal] = useState(false);
     const [calendarCity, setCalendarCity] = useState(null);
     const [tooltip, setTooltip] = useState({ visible: false, x: 0, y: 0, text: "" });
@@ -56,17 +59,36 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
     };
 
     const handleCityClick = (cidade, municipio_id, event) => {
+        console.log("handleCityClick", cidade, municipio_id, event);
         const mouseEvent = event.nativeEvent;
+        let localidades_municipio = localidades.filter(
+            (localidade) => localidade.id_municipio === municipio_id
+        );
+        console.log("localidades_municipio", localidades_municipio);
         setPopupInfo({
+            localidades: localidades_municipio,
             municipio_id,
             cidade,
             x: mouseEvent.pageX,
             y: mouseEvent.pageY,
         });
+        console.log("popupInfo", popupInfo);
     };
 
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+
+    useEffect(() => {
+        (async () => {
+            const { data, error } = await supabase.from("localidades").select("*");
+            if (error) console.error(error);
+            else setLocalidades(data);
+            const { data: municipiosData, error: municipiosError } = await supabase.from("municipios").select("*");
+            if (municipiosError) console.error(municipiosError);
+            else setMunicipios(municipiosData);
+            console.log("Localidades:", data);
+        })();
+    }, []);
 
     useEffect(() => {
         if (!popupInfo || showPopupModal) return;
@@ -232,6 +254,9 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
             {showPopupModal && popupInfo && loggedIn && (
                 <Popup
                     cidade={popupInfo.cidade}
+                    localidades={popupInfo.localidades}
+                    localidade={localidade}
+                    setLocalidade={setLocalidade}
                     onClose={() => {
                         setPopupInfo(null)
                         setShowPopupModal(false);
@@ -245,6 +270,9 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
 
                         setShowPopupModal(false);
 
+                        console.log("userId", userId);
+                        console.log("localidade", localidade);
+
                         await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_report`, {
                             method: "POST",
                             headers: {
@@ -253,7 +281,7 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
                             },
                             body: JSON.stringify({
                                 user_id: userId,
-                                municipio_id,
+                                localidade_id: localidade,
                             }),
                         });
                     }}

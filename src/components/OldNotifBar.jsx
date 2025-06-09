@@ -100,13 +100,15 @@ export default function OldNotifBar({ notifs, onClose }) {
                         const isUnconfirmed = notif.foi_confirmado === false;
                         const isResolved = notif.foi_resolvido === true;
 
+                        const createdAt = new Date(notif.created_at);
+                        const isRecent = (Date.now() - createdAt.getTime()) < 2 * 60 * 60 * 1000; // < 2 hours
+
                         return (
                             <div
                                 key={notif.id}
                                 className={`relative p-4 rounded-xl flex items-start justify-between bg-white shadow-lg mb-3 border border-gray-200 ${isUnconfirmed ? 'border-l-8 border-red-500' : ''
                                     }`}
                             >
-                                {/* resolved banner */}
                                 {isResolved && (
                                     <div className="absolute -right-4 top-6 rotate-45 bg-green-500 text-white text-[16px] px-2 py-[1px] font-bold shadow-md">
                                         RESOLVIDO
@@ -117,12 +119,11 @@ export default function OldNotifBar({ notifs, onClose }) {
                                     <h3 className="text-lg font-semibold text-gray-800">{notif.cidade}</h3>
                                     <p className="text-sm text-gray-500 mt-1">id: #{hashId}</p>
                                     <p className="text-xs text-gray-400">
-                                        {new Date(notif.created_at).toLocaleString()}
+                                        {createdAt.toLocaleString()}
                                     </p>
                                 </div>
 
-                                {/* resolve button */}
-                                {!isResolved && (
+                                {!isResolved && !isRecent && (
                                     <button
                                         aria-label="Notificação resolvida"
                                         className="ml-4 mt-1 hover:scale-110 transition-transform"
@@ -139,6 +140,12 @@ export default function OldNotifBar({ notifs, onClose }) {
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                         </svg>
                                     </button>
+                                )}
+
+                                {!isResolved && isRecent && (
+                                    <div className="ml-4 mt-1 text-xl" title="Notificação recente">
+                                        🕒
+                                    </div>
                                 )}
                             </div>
                         );

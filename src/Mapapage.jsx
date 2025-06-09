@@ -75,12 +75,24 @@ export default function MapaPage() {
                 schema: 'public',
                 table: 'user_notificacao',
             }, async ({ new: notif }) => {
+
+                setNotificacoes(prev => [notif, ...prev]);
+
+                console.log("Nova notificação recebida:", notif);
+
+                if (notif.foi_confirmado) return;
+
                 const { data, error } = await supabase.rpc(
                     'get_municipio_nome_by_notificacao_id',
                     { p_notificacao_id: notif.notificacao_id }
                 );
 
-                if (error) return console.error("rpc err:", error);
+                if (error) {
+                    console.log("Erro ao buscar dados da notificação:", error);
+                    return;
+                } 
+
+                console.log("Dados da notificação:", data);
 
                 const cidade = data?.[0];
                 if (!cidade) return;
@@ -92,6 +104,8 @@ export default function MapaPage() {
                     onClose: () => handleConfirm(notif.id, false),
                     onConfirm: () => handleConfirm(notif.id, true),
                 });
+
+                console.log("Notificações atualizadas:", notif);
             })
             .subscribe();
 
@@ -145,6 +159,7 @@ export default function MapaPage() {
             body: JSON.stringify({ user_notificacao_id: id, confirmation }),
         });
         setPopupData(null);
+        getAllNotificacoes();
     };
 
     const alertCards = [...new Map(

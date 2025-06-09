@@ -26,6 +26,8 @@ Deno.serve(async (req) => {
             return withCorsHeaders(`{"message": "notificação não encontrada"}`, 404);
         }
 
+        console.log("entry", entry);
+
         if (entry.foi_resolvido) {
             return withCorsHeaders(`{"message": "já está marcada como resolvido"}`, 409);
         }
@@ -54,12 +56,12 @@ Deno.serve(async (req) => {
 
         const { data: municipio, error: municipioError } = await supabase
             .from("notificacoes")
-            .select(`relato:relatos(id, municipio_id)`)
+            .select(`relato:relatos(id, localidade:localidades(id, id_municipio))`)
             .eq("id", entry.notificacao_id)
             .single();
 
         if (municipioError || !municipio) {
-            console.error(municipioError);
+            console.log(municipioError);
             return withCorsHeaders(`{"message": "notificação não encontrada"}`, 404);
         }
 
@@ -78,12 +80,19 @@ Deno.serve(async (req) => {
 
         console.log("situacao", situacaoId);
 
-        const {data: lastSituacao, error: lastSituacaoError} = await supabase
+        const { data: lastSituacao, error: lastSituacaoError } = await supabase
             .from("situacao_municipios")
             .select("id_situacao")
-            .eq("municipio_id", municipio.relato.municipio_id)
+            .eq("municipio_id", municipio.relato.localidade.municipio_id)
             .order("created_at", { ascending: false })
             .limit(1);
+
+        if (lastSituacaoError) {
+            console.error(lastSituacaoError);
+            return withCorsHeaders(`{"message": "falha ao buscar última situação do município"}`, 500);
+        }
+
+        console.log("lastSituacao", lastSituacao);
 
         if (lastSituacao[0]?.id_situacao === situacaoId.id) {
             return withCorsHeaders(`{"message": "já está marcada como resolvido"}`, 409);
@@ -92,7 +101,7 @@ Deno.serve(async (req) => {
         const { data: situacaoMunicipio, error } = await supabase
             .from('situacao_municipios')
             .insert([
-                { municipio_id: municipio.relato.municipio_id, id_situacao: situacaoId.id, notificacao_id: entry.notificacao_id },
+                { municipio_id: municipio.relato.localidade.municipio_id, id_situacao: situacaoId.id, notificacao_id: entry.notificacao_id },
             ])
             .select()
             .single();
