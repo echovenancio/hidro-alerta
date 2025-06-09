@@ -184,7 +184,7 @@ export default function MapaPage() {
                     <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent" />
                 </div>
 
-                <div className="flex-1">
+                <div className="flex-1 items-center justify-center relative">
 
                     <MapaBaixadaSantista
                         loggedIn={loggedIn}
@@ -193,7 +193,7 @@ export default function MapaPage() {
                         popupData={popupData}
                     />
 
-                    <div className="mt-4 flex gap-4 items-center text-sm text-gray-600">
+                    <div className="mt-4 flex gap-4 justify-center items-center text-sm text-gray-600">
                         <LegendDot color="red" />
                         <span>problema confirmado</span>
                         <LegendDot color="yellow" />
