@@ -115,7 +115,8 @@ export default function MapaPage() {
     const getSituacoes = async () => {
         const { data, error } = await supabase
             .from("ultima_situacao_por_municipio")
-            .select("*");
+            .select("*")
+            .order("created_at", { ascending: false });
 
         if (error) console.error("erro situacoes:", error);
         else setSituacoes(data);

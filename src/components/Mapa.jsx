@@ -114,15 +114,32 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
                     p_municipio_id: popupInfo?.municipio_id,
                     p_year: selectedYear,
                 });
-                if (error) console.error(error);
-                else {
-                    setCalendarCity({
-                        cidade: popupInfo.cidade,
-                        year: selectedYear,
-                        month: selectedMonth,
-                        highlightedDays: data?.map((d) => d.dia) || [],
-                    });
+
+                if (error) {
+                    console.error("Erro ao buscar dados do calendário:", error);
+                    return;
                 }
+
+                let { data: rpcData, error: rpcError } = await supabase
+                    .rpc('get_relatos_por_localidade', {
+                        municipio_id: popupInfo?.municipio_id,
+                    });
+
+
+                if (rpcError) {
+                    console.error("Erro ao buscar relatos por localidade:", rpcError);
+                    return;
+                }
+
+                console.log("Dados do relatos:", rpcData);
+
+                setCalendarCity({
+                    cidade: popupInfo.cidade,
+                    year: selectedYear,
+                    relatos: rpcData || [],
+                    month: selectedMonth,
+                    highlightedDays: data?.map((d) => d.dia) || [],
+                });
             })();
         }
     }, [selectedMonth, selectedYear]);
@@ -141,8 +158,30 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
 
         if (error) console.error(error);
 
+        const municipio_id = popupInfo?.municipio_id;
+        console.log("id do município:", municipio_id);
+
+        let { data: rpcData, error: rpcError } = await supabase
+            .rpc('get_relatos_por_localidade', {
+                municipio_id,
+            });
+
+        if (rpcError) {
+            console.error("Erro ao buscar dados do calendário:", error);
+            return;
+        }
+
+        console.log("Dados do relatos:", rpcData);
+
+        if (rpcError) {
+            console.error("Erro ao buscar relatos por localidade:", rpcError);
+            return;
+        }
+
         setCalendarCity({
             cidade: popupInfo.cidade,
+            localidades: data,
+            relatos: rpcData || [],
             year: selectedYear,
             month: selectedMonth,
             highlightedDays: data?.map((d) => d.dia) || [],
@@ -335,6 +374,7 @@ export default function MapaBaixadaSantista({ situacoes, popupData, loggedIn }) 
 
                         <CalendarHeatmap
                             cidade={calendarCity.cidade}
+                            relatosLocalidade={calendarCity.relatos}
                             year={calendarCity.year}
                             month={calendarCity.month}
                             highlightedDays={calendarCity.highlightedDays}

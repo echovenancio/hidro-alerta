@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
 
         const { data: municipio, error: municipioError } = await supabase
             .from("notificacoes")
-            .select(`relato:relatos(id, localidade:localidades(id, id_municipio))`)
+            .select(`id, relato:relatos(id, localidade:localidades(id, id_municipio))`)
             .eq("id", entry.notificacao_id)
             .single();
 
@@ -80,10 +80,14 @@ Deno.serve(async (req) => {
 
         console.log("situacao", situacaoId);
 
+        const municipioId = municipio.relato.localidade.id_municipio;
+
+        console.log("municipioId", municipioId);
+
         const { data: lastSituacao, error: lastSituacaoError } = await supabase
             .from("situacao_municipios")
             .select("id_situacao")
-            .eq("municipio_id", municipio.relato.localidade.municipio_id)
+            .eq("municipio_id", municipioId)
             .order("created_at", { ascending: false })
             .limit(1);
 
@@ -101,7 +105,7 @@ Deno.serve(async (req) => {
         const { data: situacaoMunicipio, error } = await supabase
             .from('situacao_municipios')
             .insert([
-                { municipio_id: municipio.relato.localidade.municipio_id, id_situacao: situacaoId.id, notificacao_id: entry.notificacao_id },
+                { municipio_id: municipioId, id_situacao: situacaoId.id, notificacao_id: entry.notificacao_id },
             ])
             .select()
             .single();
