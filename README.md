@@ -7,3 +7,15 @@ entrar no projeot `cd hidro-alerta`
 baixar as dependências `npm install`
 incializar o supabase `npx supabase start`
 e por fim a aplicação `npm run dev`
+
+Em relação as variáveis de ambiente o frontend depende de duas:
+`
+VITE_SUPABASE_URL=url
+VITE_SUPABASE_ANON_KEY=anon-key
+`
+
+Alem disso quando rodando o supabase localmente as edge functions requerem duas variáveis de ambiente, sendo elas:
+`
+SUPABASE_URL=url
+SUPABASE_SERVICE_ROLE_KEY=service-key
+`
